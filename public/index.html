@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div class="app-container">
         <header class="header">
@@ -22,7 +24,9 @@
         <main class="main-content">
             <section class="left-panel">
                 <div class="card upload-card">
-                    <div class="card-header"><h2>Cargar Archivo Excel</h2></div>
+                    <div class="card-header">
+                        <h2>Cargar Archivo Excel</h2>
+                    </div>
                     <div class="card-body">
                         <div class="info-box">
                             <strong>ℹ️ Formato requerido del Excel:</strong>
@@ -45,6 +49,7 @@
                         </div>
                     </div>
                 </div>
+
 
                 <div class="card companies-card">
                     <div class="card-header">
@@ -75,7 +80,8 @@
                     </div>
                     <div class="card-body">
                         <div id="console" class="console">
-                            <div class="console-line info"><span class="timestamp">[Sistema]</span><span class="message">👋 Bienvenido al Bot de Boletas SII</span></div>
+                            <div class="console-line info"><span class="timestamp">[Sistema]</span><span
+                                    class="message">👋 Bienvenido al Bot de Boletas SII</span></div>
                         </div>
                     </div>
                 </div>
@@ -95,4 +101,5 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
 </body>
+
 </html>
