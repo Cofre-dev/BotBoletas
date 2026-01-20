@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Boletas SII</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">📄</div>
+                    <h1>Bot Boletas SII</h1>
+                </div>
+                <button id="btnExport" class="btn btn-secondary" disabled>📥 Exportar Excel</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <section class="left-panel">
+                <div class="card upload-card">
+                    <div class="card-header"><h2>Cargar Archivo Excel</h2></div>
+                    <div class="card-body">
+                        <div class="info-box">
+                            <strong>ℹ️ Formato requerido del Excel:</strong>
+                            <ul>
+                                <li><strong>Columna A:</strong> Nombre de la empresa</li>
+                                <li><strong>Columna B:</strong> RUT (Ej: 12345678-9)</li>
+                                <li><strong>Columna C:</strong> Clave de acceso</li>
+                            </ul>
+                        </div>
+                        <div id="dropZone" class="drop-zone">
+                            <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                            <div class="drop-zone-content">
+                                <span class="drop-icon">📁</span>
+                                <p>Arrastra tu archivo Excel aquí</p>
+                                <span>o haz clic para seleccionar</span>
+                            </div>
+                            <div class="file-selected" id="fileSelected" style="display: none;">
+                                <span>📄</span><span id="fileName"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card companies-card">
+                    <div class="card-header">
+                        <h2>Empresas Cargadas</h2>
+                        <span id="companiesCount" class="badge">0 empresas</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="companiesList" class="companies-list">
+                            <div class="empty-state">
+                                <span>👥</span>
+                                <p>No hay empresas cargadas</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="btnStart" class="btn btn-primary btn-lg" disabled>▶️ Iniciar Extracción</button>
+                    <button id="btnStop" class="btn btn-danger btn-lg" disabled>⏹️ Detener</button>
+                </div>
+            </section>
+
+            <section class="right-panel">
+                <div class="card console-card">
+                    <div class="card-header">
+                        <h2>Consola de Pasos</h2>
+                        <button id="btnClearConsole" class="btn btn-ghost btn-sm">🗑️ Limpiar</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="console" class="console">
+                            <div class="console-line info"><span class="timestamp">[Sistema]</span><span class="message">👋 Bienvenido al Bot de Boletas SII</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card results-card" id="resultsCard" style="display: none;">
+                    <div class="card-header">
+                        <h2 id="resultsTitle">Resultados</h2>
+                        <button id="btnCloseResults" class="btn btn-ghost btn-sm">✖️</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="resultsContent" class="results-content"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
