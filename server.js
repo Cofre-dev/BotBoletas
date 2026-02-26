@@ -6,6 +6,7 @@ const path = require('path');
 const XLSX = require('xlsx');
 const fs = require('fs');
 const SIIBot = require('./bot/siiBot');
+const { uploadFile } = require('./integration-gcpStorage');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,10 +15,8 @@ const io = new Server(server);
 // Configuración de multer para subir archivos
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, 'uploads');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
+        // En Cloud Run, solo podemos escribir en /tmp
+        const uploadDir = '/tmp';
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
@@ -75,6 +74,10 @@ app.post('/upload', upload.single('excelFile'), (req, res) => {
 
         // Limpiar resultados anteriores
         resultadosEmpresas = {};
+
+        // (Opcional) Respaldar el archivo subido en Google Cloud Storage
+        // No usamos await para no bloquear la respuesta al usuario
+        uploadFile(req.file.path, `uploads/${req.file.filename}`).catch(console.error);
 
         res.json({
             success: true,
@@ -375,15 +378,16 @@ app.get('/exportar', async (req, res) => {
         }
 
         // Generar archivo
-        const exportDir = path.join(__dirname, 'exports');
-        if (!fs.existsSync(exportDir)) {
-            fs.mkdirSync(exportDir, { recursive: true });
-        }
+        // Usamos /tmp para archivos temporales en Cloud Run
+        const exportDir = '/tmp';
 
         const fileName = `Boletas_SII_${new Date().toISOString().slice(0, 10)}.xlsx`;
         const filePath = path.join(exportDir, fileName);
 
         await workbook.xlsx.writeFile(filePath);
+
+        // Subir a Google Cloud Storage como respaldo antes de enviar
+        await uploadFile(filePath, `exports/${fileName}`);
 
         res.download(filePath, fileName);
     } catch (error) {
