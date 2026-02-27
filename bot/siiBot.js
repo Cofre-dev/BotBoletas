@@ -15,15 +15,9 @@ class SIIBot {
     async initialize() {
         this.log('info', '🌐 Iniciando navegador...');
         this.browser = await puppeteer.launch({
-            // En Cloud Run debe ser headless (sin interfaz gráfica)
-            headless: 'new',
+            headless: false,
             defaultViewport: { width: 1280, height: 800 },
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // Importante para evitar problemas de memoria en Docker
-                '--disable-blink-features=AutomationControlled'
-            ]
+            args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
         });
         this.page = await this.browser.newPage();
         await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
