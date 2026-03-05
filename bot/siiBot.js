@@ -235,9 +235,9 @@ class SIIBot {
             });
             await this.wait(3000);
 
-            // Seleccionar año 2025
-            this.log('info', '📅 Seleccionando año 2025...');
-            await this.page.select('select[name="cbanoinformeanual"]', '2025');
+            // Seleccionar año 2026
+            this.log('info', '📅 Seleccionando año 2026...');
+            await this.page.select('select[name="cbanoinformeanual"]', '2026');
             await this.wait(1000);
 
             // Click en consultar
@@ -339,9 +339,9 @@ class SIIBot {
             });
             await this.wait(3000);
 
-            // Seleccionar año 2025
-            this.log('info', '📅 Seleccionando año 2025...');
-            await this.page.select('select[name="cbanoinformeanual"]', '2025');
+            // Seleccionar año 2026
+            this.log('info', '📅 Seleccionando año 2026...');
+            await this.page.select('select[name="cbanoinformeanual"]', '2026');
             await this.wait(1000);
 
             // Click en consultar
@@ -716,9 +716,9 @@ class SIIBot {
             });
             await this.wait(3000);
 
-            // 6. Seleccionar año 2025
-            this.log('info', '📅 Seleccionando año 2025...');
-            await this.page.select('select[name="ANOA"], #ANOA', '2025');
+            // 6. Seleccionar año 2026
+            this.log('info', '📅 Seleccionando año 2026...');
+            await this.page.select('select[name="ANOA"], #ANOA', '2026');
             await this.wait(1000);
 
             // 7. Click en Consultar
@@ -808,9 +808,9 @@ class SIIBot {
             });
             await this.wait(3000);
 
-            // 6. Seleccionar año 2025
-            this.log('info', '📅 Seleccionando año 2025...');
-            await this.page.select('select[name="ANOA"], #ANOA', '2025');
+            // 6. Seleccionar año 2026
+            this.log('info', '📅 Seleccionando año 2026...');
+            await this.page.select('select[name="ANOA"], #ANOA', '2026');
             await this.wait(1000);
 
             // 7. Click en Consultar

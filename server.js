@@ -136,256 +136,508 @@ app.get('/exportar', async (req, res) => {
     try {
         const ExcelJS = require('exceljs');
         const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Bot Boletas SII';
+        workbook.created = new Date();
+
+        // ─── Paleta de colores ────────────────────────────────────
+        const C = {
+            // Encabezado empresa
+            coHeader:     'FF0D1B2A',
+            coHeaderSub:  'FF1A2F44',
+            coHeaderText: 'FFFFFFFF',
+            coHeaderMuted:'FF6B9AB8',
+
+            // Boletas (azul)
+            blueSection:  'FF1D3461',
+            blueHeader:   'FF2E5EAA',
+            blueEvenRow:  'FFEEF4FB',
+            blueLight:    'FFD6E4F5',
+
+            // BTE (verde)
+            greenSection: 'FF1A4731',
+            greenHeader:  'FF2D7D55',
+            greenEvenRow: 'FFE8F5EE',
+            greenLight:   'FFBBDECE',
+
+            // Total (ámbar)
+            totalBg:      'FFCA8A04',
+            totalBorder:  'FF9A6403',
+
+            // Resumen mensaje
+            msgBg:        'FFFFF8E8',
+            msgBorder:    'FFCA8A04',
+            msgText:      'FF7B4000',
+
+            // Resumen hoja
+            resumeHdr:    'FF0D1B2A',
+            resumeColHdr: 'FF1D3461',
+            resumeEven:   'FFF0F5FF',
+            resumeTotal:  'FF1D3461',
+        };
+
+        const MONEY_FMT = '#,##0';
+        const INT_FMT   = '#,##0';
+
+        // ─── Helper: estilizar celda ─────────────────────────────
+        function sc(cell, {
+            bg, fg = 'FF1A1A1A', bold = false, italic = false,
+            size = 9.5, center = false, right = false,
+            indent = 0, numFmt = null, wrap = false, border = null
+        }) {
+            if (bg) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+            cell.font = { name: 'Calibri', bold, italic, size, color: { argb: fg } };
+            cell.alignment = {
+                vertical: 'middle',
+                horizontal: center ? 'center' : right ? 'right' : 'left',
+                indent,
+                wrapText: wrap,
+            };
+            if (numFmt) cell.numFmt = numFmt;
+            if (border) cell.border = border;
+        }
+
+        const THIN = {
+            top:    { style: 'thin',   color: { argb: 'FFD0DCE8' } },
+            bottom: { style: 'thin',   color: { argb: 'FFD0DCE8' } },
+            left:   { style: 'thin',   color: { argb: 'FFD0DCE8' } },
+            right:  { style: 'thin',   color: { argb: 'FFD0DCE8' } },
+        };
+
+        const THIN_GREEN = {
+            top:    { style: 'thin',   color: { argb: 'FFBBD9C8' } },
+            bottom: { style: 'thin',   color: { argb: 'FFBBD9C8' } },
+            left:   { style: 'thin',   color: { argb: 'FFBBD9C8' } },
+            right:  { style: 'thin',   color: { argb: 'FFBBD9C8' } },
+        };
+
+        // ─── Helper: escribir fila de sección ────────────────────
+        function writeSectionTitle(sheet, rowN, label, nCols, bgColor) {
+            sheet.mergeCells(rowN, 1, rowN, nCols);
+            const cell = sheet.getCell(rowN, 1);
+            cell.value = label;
+            sc(cell, { bg: bgColor, fg: C.coHeaderText, bold: true, size: 11, indent: 1 });
+            sheet.getRow(rowN).height = 22;
+        }
+
+        // Helper: encabezados de columna
+        function writeColHeaders(sheet, rowN, headers, bgColor, borderColor) {
+            const r = sheet.getRow(rowN);
+            r.height = 20;
+            headers.forEach((h, i) => {
+                const cell = r.getCell(i + 1);
+                cell.value = h;
+                sc(cell, { bg: bgColor, fg: 'FFFFFFFF', bold: true, size: 9, center: true });
+                cell.border = {
+                    top:    { style: 'thin',   color: { argb: borderColor } },
+                    bottom: { style: 'medium', color: { argb: borderColor } },
+                    left:   { style: 'thin',   color: { argb: 'FFFFFFFF' } },
+                    right:  { style: 'thin',   color: { argb: 'FFFFFFFF' } },
+                };
+            });
+        }
+
+        // Helper: fila de datos con filas alternadas
+        function writeDataRow(sheet, rowN, values, evenRowBg, monetaryCols, borderStyle) {
+            const isEven = rowN % 2 === 0;
+            const bg = isEven ? evenRowBg : 'FFFFFFFF';
+            const r  = sheet.getRow(rowN);
+            r.height = 17;
+            values.forEach((val, i) => {
+                const col  = i + 1;
+                const cell = r.getCell(col);
+                cell.value = val;
+                const isMoney = monetaryCols.includes(col);
+                sc(cell, {
+                    bg,
+                    size: 9,
+                    center: col === 1,
+                    right: isMoney,
+                    numFmt: isMoney ? MONEY_FMT : null,
+                });
+                cell.border = borderStyle;
+            });
+        }
+
+        // Helper: fila de totales
+        function writeTotalRow(sheet, rowN, values, monetaryCols) {
+            const r = sheet.getRow(rowN);
+            r.height = 19;
+            values.forEach((val, i) => {
+                const col  = i + 1;
+                const cell = r.getCell(col);
+                cell.value = val;
+                const isMoney = monetaryCols.includes(col);
+                sc(cell, {
+                    bg: C.totalBg, fg: 'FFFFFFFF', bold: true, size: 9,
+                    center: col === 1,
+                    right: isMoney,
+                    numFmt: isMoney ? MONEY_FMT : null,
+                });
+                cell.border = {
+                    top:    { style: 'medium', color: { argb: C.totalBorder } },
+                    bottom: { style: 'medium', color: { argb: C.totalBorder } },
+                    left:   { style: 'thin',   color: { argb: C.totalBg } },
+                    right:  { style: 'thin',   color: { argb: C.totalBg } },
+                };
+            });
+        }
+
+        // Helper: caja resumen/mensaje
+        function writeSummaryBox(sheet, rowN, label, nCols) {
+            sheet.mergeCells(rowN, 1, rowN, nCols);
+            const cell = sheet.getCell(rowN, 1);
+            cell.value = label;
+            sc(cell, {
+                bg: C.msgBg, fg: C.msgText, bold: true, italic: true,
+                size: 10, center: true,
+            });
+            cell.border = {
+                top:    { style: 'medium', color: { argb: C.msgBorder } },
+                bottom: { style: 'medium', color: { argb: C.msgBorder } },
+                left:   { style: 'medium', color: { argb: C.msgBorder } },
+                right:  { style: 'medium', color: { argb: C.msgBorder } },
+            };
+            sheet.getRow(rowN).height = 20;
+        }
+
+        // ─── Hoja RESUMEN ─────────────────────────────────────────
+        const resSheet = workbook.addWorksheet('Resumen');
+        resSheet.properties.tabColor = { argb: C.resumeHdr };
+
+        resSheet.columns = [
+            { width: 36 },  // A Empresa
+            { width: 16 },  // B RUT
+            { width: 22 },  // C Hon. Emit.
+            { width: 22 },  // D Hon. Rec.
+            { width: 22 },  // E BTE Rec.
+            { width: 22 },  // F BTE Emit.
+            { width: 11 },  // G Estado
+        ];
+
+        // Título
+        resSheet.mergeCells('A1:G1');
+        sc(resSheet.getCell('A1'), {
+            bg: C.resumeHdr, fg: 'FFFFFFFF', bold: true, size: 12, center: true,
+        });
+        resSheet.getCell('A1').value = 'RESUMEN GENERAL — BOLETAS DE HONORARIOS Y BTE — 2025';
+        resSheet.getRow(1).height = 27;
+
+        // Fecha generación
+        resSheet.mergeCells('A2:G2');
+        sc(resSheet.getCell('A2'), { bg: C.coHeaderSub, fg: C.coHeaderMuted, size: 9, center: true });
+        resSheet.getCell('A2').value =
+            `Generado: ${new Date().toLocaleDateString('es-CL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+        resSheet.getRow(2).height = 16;
+
+        // Separador
+        resSheet.getRow(3).height = 7;
+
+        // Encabezados resumen
+        const resHeaders = ['EMPRESA / CONTRIBUYENTE', 'RUT', 'HON. BRUTO EMITIDO', 'HON. BRUTO RECIBIDO', 'MONTO BTE RECIBIDO', 'MONTO BTE EMITIDO', 'ESTADO'];
+        const resHdrRow  = resSheet.getRow(4);
+        resHdrRow.height = 22;
+        resHeaders.forEach((h, i) => {
+            const cell = resHdrRow.getCell(i + 1);
+            cell.value = h;
+            sc(cell, { bg: C.resumeColHdr, fg: 'FFFFFFFF', bold: true, size: 9, center: i > 0 });
+            cell.border = THIN;
+        });
+        resSheet.views = [{ state: 'frozen', ySplit: 4 }];
+
+        let resRow = 5;
+        const resTotals = { emit: 0, rec: 0, bteRec: 0, bteEmit: 0 };
+
+        // ─── Hojas por empresa ────────────────────────────────────
+        const TAB_COLORS = ['FF2558A6', 'FF1B7A4A', 'FF7057B8', 'FF8B3A3A', 'FF1A7070'];
+        let sheetIdx = 0;
 
         for (const empresaId in resultadosEmpresas) {
             const resultado = resultadosEmpresas[empresaId];
-            const empresa = empresasData.find(e => e.id === parseInt(empresaId));
-
+            const empresa   = empresasData.find(e => e.id === parseInt(empresaId));
             if (!empresa || !resultado) continue;
 
-            // Crear hoja para esta empresa
-            const sheetName = empresa.nombre.substring(0, 31).replace(/[*?:/\\[\]]/g, '');
-            const sheet = workbook.addWorksheet(sheetName);
+            const sheetName = empresa.nombre.substring(0, 31).replace(/[*?:/\\[\]]/g, '').trim();
+            const sheet     = workbook.addWorksheet(sheetName);
+            sheet.properties.tabColor = { argb: TAB_COLORS[sheetIdx % TAB_COLORS.length] };
+            sheetIdx++;
 
-            // Estilo para encabezados
-            const headerStyle = {
-                font: { bold: true, color: { argb: 'FFFFFFFF' } },
-                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1a365d' } },
-                alignment: { horizontal: 'center', vertical: 'middle' }
-            };
+            // Anchos de columnas (máximo 9 cols para boletas emitidas)
+            sheet.columns = [
+                { width: 13 },  // A Período
+                { width: 13 },  // B Folio Ini / Vigentes
+                { width: 13 },  // C Folio Fin / Anuladas
+                { width: 11 },  // D Vigentes / Hon. Bruto
+                { width: 11 },  // E Anuladas / Ret. Terc.
+                { width: 20 },  // F Hon. Bruto / Ret. Contrib / Monto Total
+                { width: 18 },  // G Ret. Terc. / Liq.
+                { width: 22 },  // H Ret. Contrib.
+                { width: 20 },  // I Total Líquido
+            ];
 
-            // Información del contribuyente
+            // ── Bloque encabezado empresa (filas 1-3) ─────────────
             sheet.mergeCells('A1:I1');
-            sheet.getCell('A1').value = `Contribuyente: ${resultado.contribuyente || empresa.nombre}`;
-            sheet.getCell('A1').font = { bold: true, size: 14 };
+            sc(sheet.getCell('A1'), { bg: C.coHeader, fg: C.coHeaderText, bold: true, size: 13, indent: 1 });
+            sheet.getCell('A1').value = resultado.contribuyente || empresa.nombre;
+            sheet.getRow(1).height = 26;
 
             sheet.mergeCells('A2:I2');
+            sc(sheet.getCell('A2'), { bg: C.coHeader, fg: C.coHeaderMuted, size: 10, indent: 1 });
             sheet.getCell('A2').value = `RUT: ${resultado.rut || empresa.rut}`;
-            sheet.getCell('A2').font = { bold: true, size: 12 };
+            sheet.getRow(2).height = 19;
 
-            // === BOLETAS EMITIDAS ===
-            sheet.mergeCells('A4:I4');
-            sheet.getCell('A4').value = 'BOLETAS EMITIDAS - AÑO 2025';
-            sheet.getCell('A4').font = { bold: true, size: 14, color: { argb: 'FF1a365d' } };
-            sheet.getCell('A4').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFe2e8f0' } };
+            sheet.mergeCells('A3:I3');
+            sc(sheet.getCell('A3'), { bg: C.coHeaderSub, fg: 'FF4D7A99', size: 8.5, indent: 1 });
+            sheet.getCell('A3').value =
+                `Generado: ${new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })}  ·  Bot Boletas SII`;
+            sheet.getRow(3).height = 15;
 
-            // Encabezados boletas emitidas
-            const headersEmitidas = ['PERIODO', 'FOLIO INICIAL', 'FOLIO FINAL', 'VIGENTES', 'ANULADAS', 'HONORARIO BRUTO', 'RET. TERCEROS', 'RET. CONTRIBUYENTE', 'TOTAL LÍQUIDO'];
-            const headerRowEmitidas = sheet.getRow(5);
-            headersEmitidas.forEach((header, idx) => {
-                const cell = headerRowEmitidas.getCell(idx + 1);
-                cell.value = header;
-                cell.font = headerStyle.font;
-                cell.fill = headerStyle.fill;
-                cell.alignment = headerStyle.alignment;
-            });
+            sheet.getRow(4).height = 8; // separador
 
-            // Datos de boletas emitidas
-            if (resultado.boletasEmitidas && resultado.boletasEmitidas.meses) {
-                let rowNum = 6;
+            let row = 5;
+            sheet.views = [{ state: 'frozen', ySplit: 4 }];
+
+            // ── BOLETAS EMITIDAS ──────────────────────────────────
+            writeSectionTitle(sheet, row, '  BOLETAS DE HONORARIOS EMITIDAS — 2025', 9, C.blueSection);
+            row++;
+
+            if (resultado.boletasEmitidas?.meses?.length) {
+                writeColHeaders(sheet, row,
+                    ['PERIODO', 'FOLIO INICIAL', 'FOLIO FINAL', 'VIGENTES', 'ANULADAS', 'HONORARIO BRUTO', 'RET. TERCEROS', 'RET. CONTRIBUYENTE', 'TOTAL LÍQUIDO'],
+                    C.blueHeader, 'FF1A3D7A');
+                row++;
+
                 resultado.boletasEmitidas.meses.forEach(mes => {
-                    const row = sheet.getRow(rowNum);
-                    row.getCell(1).value = mes.periodo;
-                    row.getCell(2).value = mes.folioInicial || '';
-                    row.getCell(3).value = mes.folioFinal || '';
-                    row.getCell(4).value = mes.vigentes || 0;
-                    row.getCell(5).value = mes.anuladas || 0;
-                    row.getCell(6).value = mes.honorarioBruto || 0;
-                    row.getCell(7).value = mes.retencionTerceros || 0;
-                    row.getCell(8).value = mes.retencionContribuyente || 0;
-                    row.getCell(9).value = mes.totalLiquido || 0;
-                    rowNum++;
+                    writeDataRow(sheet, row,
+                        [mes.periodo, mes.folioInicial || '—', mes.folioFinal || '—',
+                         mes.vigentes || 0, mes.anuladas || 0,
+                         mes.honorarioBruto || 0, mes.retencionTerceros || 0,
+                         mes.retencionContribuyente || 0, mes.totalLiquido || 0],
+                        C.blueEvenRow, [6, 7, 8, 9], THIN);
+                    row++;
                 });
 
-                // Fila de totales
-                const totalRowEmitidas = sheet.getRow(rowNum);
-                totalRowEmitidas.getCell(1).value = 'TOTALES';
-                totalRowEmitidas.getCell(1).font = { bold: true };
-                totalRowEmitidas.getCell(4).value = resultado.boletasEmitidas.totales?.vigentes || 0;
-                totalRowEmitidas.getCell(5).value = resultado.boletasEmitidas.totales?.anuladas || 0;
-                totalRowEmitidas.getCell(6).value = resultado.boletasEmitidas.totales?.honorarioBruto || 0;
-                totalRowEmitidas.getCell(7).value = resultado.boletasEmitidas.totales?.retencionTerceros || 0;
-                totalRowEmitidas.getCell(8).value = resultado.boletasEmitidas.totales?.retencionContribuyente || 0;
-                totalRowEmitidas.getCell(9).value = resultado.boletasEmitidas.totales?.totalLiquido || 0;
-                totalRowEmitidas.eachCell(cell => { cell.font = { bold: true }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFe2e8f0' } }; });
-                rowNum += 2;
+                const te = resultado.boletasEmitidas.totales || {};
+                writeTotalRow(sheet, row,
+                    ['TOTALES', '', '', te.vigentes || 0, te.anuladas || 0,
+                     te.honorarioBruto || 0, te.retencionTerceros || 0,
+                     te.retencionContribuyente || 0, te.totalLiquido || 0],
+                    [6, 7, 8, 9]);
+                row += 2;
 
-                // Mensaje resumen de honorarios brutos emitidos
-                sheet.mergeCells(`A${rowNum}:I${rowNum}`);
-                const mensajeEmitidas = sheet.getCell(`A${rowNum}`);
-                mensajeEmitidas.value = `El contribuyente ${resultado.contribuyente || empresa.nombre} tiene como HONORARIOS BRUTOS EMITIDOS: $${(resultado.boletasEmitidas.totales?.honorarioBruto || 0).toLocaleString('es-CL')}`;
-                mensajeEmitidas.font = { bold: true, size: 12, color: { argb: 'FF1a365d' } };
-                mensajeEmitidas.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFfef3c7' } };
-                rowNum += 3;
+                writeSummaryBox(sheet, row,
+                    `HONORARIOS BRUTOS EMITIDOS: $${(te.honorarioBruto || 0).toLocaleString('es-CL')}`, 9);
+                row += 2;
 
-                // === BOLETAS RECIBIDAS ===
-                sheet.mergeCells(`A${rowNum}:I${rowNum}`);
-                sheet.getCell(`A${rowNum}`).value = 'BOLETAS RECIBIDAS - AÑO 2025';
-                sheet.getCell(`A${rowNum}`).font = { bold: true, size: 14, color: { argb: 'FF1a365d' } };
-                sheet.getCell(`A${rowNum}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFe2e8f0' } };
-                rowNum++;
-
-                // Encabezados boletas recibidas
-                const headersRecibidas = ['PERIODO', 'VIGENTES', 'ANULADAS', 'HONORARIO BRUTO', 'RET. TERCEROS', 'RET. CONTRIBUYENTE', 'TOTAL LÍQUIDO'];
-                const headerRowRecibidas = sheet.getRow(rowNum);
-                headersRecibidas.forEach((header, idx) => {
-                    const cell = headerRowRecibidas.getCell(idx + 1);
-                    cell.value = header;
-                    cell.font = headerStyle.font;
-                    cell.fill = headerStyle.fill;
-                    cell.alignment = headerStyle.alignment;
-                });
-                rowNum++;
-
-                if (resultado.boletasRecibidas && resultado.boletasRecibidas.meses) {
-                    resultado.boletasRecibidas.meses.forEach(mes => {
-                        const row = sheet.getRow(rowNum);
-                        row.getCell(1).value = mes.periodo;
-                        row.getCell(2).value = mes.vigentes || 0;
-                        row.getCell(3).value = mes.anuladas || 0;
-                        row.getCell(4).value = mes.honorarioBruto || 0;
-                        row.getCell(5).value = mes.retencionTerceros || 0;
-                        row.getCell(6).value = mes.retencionContribuyente || 0;
-                        row.getCell(7).value = mes.totalLiquido || 0;
-                        rowNum++;
-                    });
-
-                    // Fila de totales recibidas
-                    const totalRowRecibidas = sheet.getRow(rowNum);
-                    totalRowRecibidas.getCell(1).value = 'TOTALES';
-                    totalRowRecibidas.getCell(1).font = { bold: true };
-                    totalRowRecibidas.getCell(2).value = resultado.boletasRecibidas.totales?.vigentes || 0;
-                    totalRowRecibidas.getCell(3).value = resultado.boletasRecibidas.totales?.anuladas || 0;
-                    totalRowRecibidas.getCell(4).value = resultado.boletasRecibidas.totales?.honorarioBruto || 0;
-                    totalRowRecibidas.getCell(5).value = resultado.boletasRecibidas.totales?.retencionTerceros || 0;
-                    totalRowRecibidas.getCell(6).value = resultado.boletasRecibidas.totales?.retencionContribuyente || 0;
-                    totalRowRecibidas.getCell(7).value = resultado.boletasRecibidas.totales?.totalLiquido || 0;
-                    totalRowRecibidas.eachCell(cell => { cell.font = { bold: true }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFe2e8f0' } }; });
-                    rowNum += 2;
-
-                    // Mensaje resumen de honorarios brutos recibidos
-                    sheet.mergeCells(`A${rowNum}:G${rowNum}`);
-                    const mensajeRecibidas = sheet.getCell(`A${rowNum}`);
-                    mensajeRecibidas.value = `El contribuyente ${resultado.contribuyente || empresa.nombre} tiene como HONORARIOS BRUTOS RECIBIDOS: $${(resultado.boletasRecibidas.totales?.honorarioBruto || 0).toLocaleString('es-CL')}`;
-                    mensajeRecibidas.font = { bold: true, size: 12, color: { argb: 'FF1a365d' } };
-                    mensajeRecibidas.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFfef3c7' } };
-                    rowNum += 3;
-                }
-
-                // === BTE RECIBIDAS ===
-                if (resultado.bteRecibidas && resultado.bteRecibidas.meses) {
-                    sheet.mergeCells(`A${rowNum}:F${rowNum}`);
-                    sheet.getCell(`A${rowNum}`).value = 'BTE RECIBIDAS (PRESTACIÓN DE SERVICIOS DE TERCEROS) - AÑO 2025';
-                    sheet.getCell(`A${rowNum}`).font = { bold: true, size: 14, color: { argb: 'FF276749' } };
-                    sheet.getCell(`A${rowNum}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFc6f6d5' } };
-                    rowNum++;
-
-                    const headersBTE = ['PERIODO', 'CANTIDAD', 'MONTO NETO', 'MONTO EXENTO', 'IVA', 'MONTO TOTAL'];
-                    const headerRowBTERec = sheet.getRow(rowNum);
-                    headersBTE.forEach((header, idx) => {
-                        const cell = headerRowBTERec.getCell(idx + 1);
-                        cell.value = header;
-                        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF276749' } };
-                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    });
-                    rowNum++;
-
-                    resultado.bteRecibidas.meses.forEach(mes => {
-                        const row = sheet.getRow(rowNum);
-                        row.getCell(1).value = mes.periodo;
-                        row.getCell(2).value = mes.cantidad || 0;
-                        row.getCell(3).value = mes.montoNeto || 0;
-                        row.getCell(4).value = mes.montoExento || 0;
-                        row.getCell(5).value = mes.montoIva || 0;
-                        row.getCell(6).value = mes.montoTotal || 0;
-                        rowNum++;
-                    });
-
-                    const totalRowBTERec = sheet.getRow(rowNum);
-                    totalRowBTERec.getCell(1).value = 'TOTALES';
-                    totalRowBTERec.getCell(2).value = resultado.bteRecibidas.totales?.cantidad || 0;
-                    totalRowBTERec.getCell(3).value = resultado.bteRecibidas.totales?.montoNeto || 0;
-                    totalRowBTERec.getCell(4).value = resultado.bteRecibidas.totales?.montoExento || 0;
-                    totalRowBTERec.getCell(5).value = resultado.bteRecibidas.totales?.montoIva || 0;
-                    totalRowBTERec.getCell(6).value = resultado.bteRecibidas.totales?.montoTotal || 0;
-                    totalRowBTERec.eachCell(cell => { cell.font = { bold: true }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFc6f6d5' } }; });
-                    rowNum += 2;
-
-                    sheet.mergeCells(`A${rowNum}:F${rowNum}`);
-                    const mensajeBTERec = sheet.getCell(`A${rowNum}`);
-                    mensajeBTERec.value = `El contribuyente ${resultado.contribuyente || empresa.nombre} tiene como MONTO TOTAL BTE RECIBIDAS: $${(resultado.bteRecibidas.totales?.montoTotal || 0).toLocaleString('es-CL')}`;
-                    mensajeBTERec.font = { bold: true, size: 12, color: { argb: 'FF276749' } };
-                    mensajeBTERec.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFc6f6d5' } };
-                    rowNum += 3;
-                }
-
-                // === BTE EMITIDAS ===
-                if (resultado.bteEmitidas && resultado.bteEmitidas.meses) {
-                    sheet.mergeCells(`A${rowNum}:F${rowNum}`);
-                    sheet.getCell(`A${rowNum}`).value = 'BTE EMITIDAS (PRESTACIÓN DE SERVICIOS DE TERCEROS) - AÑO 2025';
-                    sheet.getCell(`A${rowNum}`).font = { bold: true, size: 14, color: { argb: 'FF276749' } };
-                    sheet.getCell(`A${rowNum}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFc6f6d5' } };
-                    rowNum++;
-
-                    const headersBTEEm = ['PERIODO', 'CANTIDAD', 'MONTO NETO', 'MONTO EXENTO', 'IVA', 'MONTO TOTAL'];
-                    const headerRowBTEEm = sheet.getRow(rowNum);
-                    headersBTEEm.forEach((header, idx) => {
-                        const cell = headerRowBTEEm.getCell(idx + 1);
-                        cell.value = header;
-                        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF276749' } };
-                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    });
-                    rowNum++;
-
-                    resultado.bteEmitidas.meses.forEach(mes => {
-                        const row = sheet.getRow(rowNum);
-                        row.getCell(1).value = mes.periodo;
-                        row.getCell(2).value = mes.cantidad || 0;
-                        row.getCell(3).value = mes.montoNeto || 0;
-                        row.getCell(4).value = mes.montoExento || 0;
-                        row.getCell(5).value = mes.montoIva || 0;
-                        row.getCell(6).value = mes.montoTotal || 0;
-                        rowNum++;
-                    });
-
-                    const totalRowBTEEm = sheet.getRow(rowNum);
-                    totalRowBTEEm.getCell(1).value = 'TOTALES';
-                    totalRowBTEEm.getCell(2).value = resultado.bteEmitidas.totales?.cantidad || 0;
-                    totalRowBTEEm.getCell(3).value = resultado.bteEmitidas.totales?.montoNeto || 0;
-                    totalRowBTEEm.getCell(4).value = resultado.bteEmitidas.totales?.montoExento || 0;
-                    totalRowBTEEm.getCell(5).value = resultado.bteEmitidas.totales?.montoIva || 0;
-                    totalRowBTEEm.getCell(6).value = resultado.bteEmitidas.totales?.montoTotal || 0;
-                    totalRowBTEEm.eachCell(cell => { cell.font = { bold: true }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFc6f6d5' } }; });
-                    rowNum += 2;
-
-                    sheet.mergeCells(`A${rowNum}:F${rowNum}`);
-                    const mensajeBTEEm = sheet.getCell(`A${rowNum}`);
-                    mensajeBTEEm.value = `El contribuyente ${resultado.contribuyente || empresa.nombre} tiene como MONTO TOTAL BTE EMITIDAS: $${(resultado.bteEmitidas.totales?.montoTotal || 0).toLocaleString('es-CL')}`;
-                    mensajeBTEEm.font = { bold: true, size: 12, color: { argb: 'FF276749' } };
-                    mensajeBTEEm.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFc6f6d5' } };
-                }
+                resTotals.emit += te.honorarioBruto || 0;
+            } else {
+                sheet.mergeCells(row, 1, row, 9);
+                sc(sheet.getCell(row, 1), { fg: 'FF999999', size: 9, indent: 1 });
+                sheet.getCell(row, 1).value = 'Sin datos para este período';
+                sheet.getRow(row).height = 16;
+                row += 2;
             }
 
-            // Ajustar ancho de columnas
-            sheet.columns.forEach(column => {
-                column.width = 18;
+            // ── BOLETAS RECIBIDAS ─────────────────────────────────
+            writeSectionTitle(sheet, row, '  BOLETAS DE HONORARIOS RECIBIDAS — 2025', 7, C.blueSection);
+            row++;
+
+            if (resultado.boletasRecibidas?.meses?.length) {
+                writeColHeaders(sheet, row,
+                    ['PERIODO', 'VIGENTES', 'ANULADAS', 'HONORARIO BRUTO', 'RET. TERCEROS', 'RET. CONTRIBUYENTE', 'TOTAL LÍQUIDO'],
+                    C.blueHeader, 'FF1A3D7A');
+                row++;
+
+                resultado.boletasRecibidas.meses.forEach(mes => {
+                    writeDataRow(sheet, row,
+                        [mes.periodo, mes.vigentes || 0, mes.anuladas || 0,
+                         mes.honorarioBruto || 0, mes.retencionTerceros || 0,
+                         mes.retencionContribuyente || 0, mes.totalLiquido || 0],
+                        C.blueEvenRow, [4, 5, 6, 7], THIN);
+                    row++;
+                });
+
+                const tr = resultado.boletasRecibidas.totales || {};
+                writeTotalRow(sheet, row,
+                    ['TOTALES', tr.vigentes || 0, tr.anuladas || 0,
+                     tr.honorarioBruto || 0, tr.retencionTerceros || 0,
+                     tr.retencionContribuyente || 0, tr.totalLiquido || 0],
+                    [4, 5, 6, 7]);
+                row += 2;
+
+                writeSummaryBox(sheet, row,
+                    `HONORARIOS BRUTOS RECIBIDOS: $${(tr.honorarioBruto || 0).toLocaleString('es-CL')}`, 7);
+                row += 2;
+
+                resTotals.rec += tr.honorarioBruto || 0;
+            } else {
+                sheet.mergeCells(row, 1, row, 7);
+                sc(sheet.getCell(row, 1), { fg: 'FF999999', size: 9, indent: 1 });
+                sheet.getCell(row, 1).value = 'Sin datos para este período';
+                sheet.getRow(row).height = 16;
+                row += 2;
+            }
+
+            // ── BTE RECIBIDAS ─────────────────────────────────────
+            writeSectionTitle(sheet, row, '  BTE RECIBIDAS (PRESTACIÓN DE SERVICIOS DE TERCEROS) — 2025', 6, C.greenSection);
+            row++;
+
+            if (resultado.bteRecibidas?.meses?.length) {
+                writeColHeaders(sheet, row,
+                    ['PERIODO', 'CANTIDAD', 'MONTO NETO', 'MONTO EXENTO', 'IVA', 'MONTO TOTAL'],
+                    C.greenHeader, 'FF1A5233');
+                row++;
+
+                resultado.bteRecibidas.meses.forEach(mes => {
+                    writeDataRow(sheet, row,
+                        [mes.periodo, mes.cantidad || 0, mes.montoNeto || 0,
+                         mes.montoExento || 0, mes.montoIva || 0, mes.montoTotal || 0],
+                        C.greenEvenRow, [3, 4, 5, 6], THIN_GREEN);
+                    row++;
+                });
+
+                const tbr = resultado.bteRecibidas.totales || {};
+                writeTotalRow(sheet, row,
+                    ['TOTALES', tbr.cantidad || 0, tbr.montoNeto || 0,
+                     tbr.montoExento || 0, tbr.montoIva || 0, tbr.montoTotal || 0],
+                    [3, 4, 5, 6]);
+                row += 2;
+
+                writeSummaryBox(sheet, row,
+                    `MONTO TOTAL BTE RECIBIDAS: $${(tbr.montoTotal || 0).toLocaleString('es-CL')}`, 6);
+                row += 2;
+
+                resTotals.bteRec += tbr.montoTotal || 0;
+            } else {
+                sheet.mergeCells(row, 1, row, 6);
+                sc(sheet.getCell(row, 1), { fg: 'FF999999', size: 9, indent: 1 });
+                sheet.getCell(row, 1).value = 'Sin datos para este período';
+                sheet.getRow(row).height = 16;
+                row += 2;
+            }
+
+            // ── BTE EMITIDAS ──────────────────────────────────────
+            writeSectionTitle(sheet, row, '  BTE EMITIDAS (PRESTACIÓN DE SERVICIOS DE TERCEROS) — 2025', 6, C.greenSection);
+            row++;
+
+            if (resultado.bteEmitidas?.meses?.length) {
+                writeColHeaders(sheet, row,
+                    ['PERIODO', 'CANTIDAD', 'MONTO NETO', 'MONTO EXENTO', 'IVA', 'MONTO TOTAL'],
+                    C.greenHeader, 'FF1A5233');
+                row++;
+
+                resultado.bteEmitidas.meses.forEach(mes => {
+                    writeDataRow(sheet, row,
+                        [mes.periodo, mes.cantidad || 0, mes.montoNeto || 0,
+                         mes.montoExento || 0, mes.montoIva || 0, mes.montoTotal || 0],
+                        C.greenEvenRow, [3, 4, 5, 6], THIN_GREEN);
+                    row++;
+                });
+
+                const tbe = resultado.bteEmitidas.totales || {};
+                writeTotalRow(sheet, row,
+                    ['TOTALES', tbe.cantidad || 0, tbe.montoNeto || 0,
+                     tbe.montoExento || 0, tbe.montoIva || 0, tbe.montoTotal || 0],
+                    [3, 4, 5, 6]);
+                row += 2;
+
+                writeSummaryBox(sheet, row,
+                    `MONTO TOTAL BTE EMITIDAS: $${(tbe.montoTotal || 0).toLocaleString('es-CL')}`, 6);
+
+                resTotals.bteEmit += tbe.montoTotal || 0;
+            } else {
+                sheet.mergeCells(row, 1, row, 6);
+                sc(sheet.getCell(row, 1), { fg: 'FF999999', size: 9, indent: 1 });
+                sheet.getCell(row, 1).value = 'Sin datos para este período';
+                sheet.getRow(row).height = 16;
+            }
+
+            // ── Fila en hoja Resumen ──────────────────────────────
+            const isResEven = resRow % 2 === 0;
+            const resBg     = isResEven ? C.resumeEven : 'FFFFFFFF';
+            const resDataRow = resSheet.getRow(resRow);
+            resDataRow.height = 18;
+
+            const resVals = [
+                resultado.contribuyente || empresa.nombre,
+                resultado.rut || empresa.rut,
+                resultado.boletasEmitidas?.totales?.honorarioBruto  || 0,
+                resultado.boletasRecibidas?.totales?.honorarioBruto || 0,
+                resultado.bteRecibidas?.totales?.montoTotal         || 0,
+                resultado.bteEmitidas?.totales?.montoTotal          || 0,
+                empresa.estado === 'completado' ? 'Completado' : 'Error',
+            ];
+
+            resVals.forEach((val, i) => {
+                const cell = resDataRow.getCell(i + 1);
+                cell.value = val;
+                const isMoney = i >= 2 && i <= 5;
+                sc(cell, {
+                    bg: resBg, size: 9,
+                    center: i === 6,
+                    right: isMoney,
+                    numFmt: isMoney ? MONEY_FMT : null,
+                });
+                cell.border = THIN;
+                // Color estado
+                if (i === 6) {
+                    cell.font = {
+                        name: 'Calibri', bold: true, size: 9,
+                        color: { argb: val === 'Completado' ? 'FF1A7A4A' : 'FF9B2222' },
+                    };
+                }
+            });
+            resRow++;
+        }
+
+        // ── Fila totales hoja Resumen ─────────────────────────────
+        if (resRow > 5) {
+            resSheet.getRow(resRow).height = 7; // separador
+            resRow++;
+
+            const resTotRow = resSheet.getRow(resRow);
+            resTotRow.height = 20;
+            const resTotVals = [
+                'TOTALES', '',
+                resTotals.emit, resTotals.rec, resTotals.bteRec, resTotals.bteEmit, '',
+            ];
+            resTotVals.forEach((val, i) => {
+                const cell = resTotRow.getCell(i + 1);
+                cell.value = val;
+                const isMoney = i >= 2 && i <= 5;
+                sc(cell, {
+                    bg: C.resumeTotal, fg: 'FFFFFFFF', bold: true, size: 9.5,
+                    center: i === 0 || i === 6,
+                    right: isMoney,
+                    numFmt: isMoney ? MONEY_FMT : null,
+                });
+                cell.border = {
+                    top:    { style: 'medium', color: { argb: C.totalBorder } },
+                    bottom: { style: 'medium', color: { argb: C.totalBorder } },
+                    left:   { style: 'thin',   color: { argb: C.resumeTotal } },
+                    right:  { style: 'thin',   color: { argb: C.resumeTotal } },
+                };
             });
         }
 
-        // Generar archivo
+        // ── Generar y enviar ──────────────────────────────────────
         const exportDir = path.join(__dirname, 'exports');
-        if (!fs.existsSync(exportDir)) {
-            fs.mkdirSync(exportDir, { recursive: true });
-        }
+        if (!fs.existsSync(exportDir)) fs.mkdirSync(exportDir, { recursive: true });
 
-        const fileName = `Boletas_SII_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        const { injectVBA } = require('./bot/excelVBA');
+
+        // Generar buffer XLSX desde ExcelJS
+        const xlsxBuffer = await workbook.xlsx.writeBuffer();
+
+        // Intentar inyectar macros VBA → convierte a XLSM
+        const xlsmBuffer = await injectVBA(xlsxBuffer);
+
+        const ext      = xlsmBuffer ? 'xlsm' : 'xlsx';
+        const fileName = `Boletas_SII_${new Date().toISOString().slice(0, 10)}.${ext}`;
         const filePath = path.join(exportDir, fileName);
 
-        await workbook.xlsx.writeFile(filePath);
-
+        fs.writeFileSync(filePath, xlsmBuffer || xlsxBuffer);
         res.download(filePath, fileName);
+
     } catch (error) {
         console.error('Error al exportar:', error);
         res.status(500).json({ error: 'Error al generar el archivo Excel' });
@@ -455,7 +707,7 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log(`🚀 Servidor ejecutándose en http://localhost:${PORT}`);
 });
